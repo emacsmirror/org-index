@@ -1,10 +1,10 @@
 ;;; org-index.el --- Ranked and incremental search among selected org-headlines -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2025 Free Software Foundation, Inc.
 
 ;; Author: Marc Ihm <marc@ihm.name>
 ;; URL: https://github.com/marcIhm/org-index
-;; Version: 7.4.7
+;; Version: 7.5.0
 ;; Package-Requires: ((org "9.3") (dash "2.12") (s "1.12") (emacs "26.3"))
 
 ;; This file is not part of GNU Emacs.
@@ -81,6 +81,12 @@
 
 ;;; Change Log:
 
+;;  Version 7.5
+;;
+;;  - Accept double prefix argument to subcommand 'add', which
+;;    adds tag 'oidx_temp'
+;;  - Started to increase minor version even on small features
+;;
 ;;  Version 7.4
 ;;
 ;;  - Index checks now find largest cells for each column
@@ -258,7 +264,7 @@
 (defvar oidx--check-count-interval 86400 "Number of seconds between checks for linecount in index; see `oidx--last-count-check'.")
 
 ;; Version of this package
-(defvar org-index-version "7.4.7" "Version of `org-index', format is major.minor.bugfix, where \"major\" are incompatible changes and \"minor\" are new features.")
+(defvar org-index-version "7.5.0" "Version of `org-index', format is major.minor.bugfix, where \"major\" are incompatible changes and \"minor\" are new features.")
 
 ;; customizable options
 (defgroup org-index nil
@@ -435,7 +441,7 @@ edit the index table.  The number of columns shown during occur is
 determined by `org-index-occur-columns'.  Using both features allows to
 ignore columns during search.
 
-This is version 7.4.7 of org-index.el.
+This is version 7.5.0 of org-index.el.
 
 The function `org-index\\=' is the main interactive function of this
 package and its main entry point; it will present you with a list
@@ -806,14 +812,16 @@ Invoke assistant if not."
     (let (marker)
       (setq marker (oidx--id-find org-index-id 'marker))
       (unless marker
-        (or (y-or-n-p (format "ID %s of index table cannot be found.\n\nIf you know the location of your index-node, you might check its property-drawer e.g. for empty lines that can prevent it from beeing found; in that case you may bail out now.\n\nOtherwise and if you continue, this assistant will try to fix things by updating id-locations and then, if this does not help, offer you to create a new index.\n\nContinue ? " org-index-id))
+	(oidx--message-before-update-id-locations)
+	(org-id-update-id-locations)
+	(message "Done.")
+	(setq marker (oidx--id-find org-index-id 'marker)))
+      (unless marker
+        (or (y-or-n-p (format "Cannot find index table node with ID %s !  If you know the location of your index-node, you might check its property-drawer e.g. for empty lines that can prevent it from beeing found; in that case you may bail out now.\n\nOtherwise and if you continue, this assistant will offer you to create a new index.\n\nContinue ? " org-index-id))
             (progn
               (message "You have chosen to try to repair your existing index table. Please do so now and then invoke org-index again.")
               (throw 'missing-index t)))
-        (org-id-update-id-locations)
-        (setq marker (oidx--id-find org-index-id 'marker))
-        (unless marker
-          (oidx--create-missing-index (format "Cannot find the node with id \"%s\" (as specified by variable org-index-id)." org-index-id))))
+        (oidx--create-missing-index (format "Cannot find the node with id \"%s\" (as specified by variable org-index-id)." org-index-id)))
       ;; Try again after updating IDs or with new node
       (setq marker (oidx--id-find org-index-id 'marker))
       (unless marker
@@ -1372,11 +1380,15 @@ Optional argument DEFAULTS gives default values."
     (setq kvs (cddr kvs))))
 
 
-(defun oidx--do-add-or-update (&optional create-ref)
+(defun oidx--do-add-or-update (&optional ref-or-temp)
   "For current node or current line in index, add or update in index table.
-CREATE-REF creates a reference and passes it to yank."
+REF-OR-TEMP either creates a reference and returns it to be yanked (for single `C-u')
+or makes the index-entry temporary by adding the tag oidx_temp to the heading."
 
   (let* (id id-from-index ref args yank ret kw)
+
+    (when (eq (prefix-numeric-value ref-or-temp) 16)
+      (org-toggle-tag "oidx_temp" `on))
 
     (unless (string-equal major-mode "org-mode")
       (error "This is not an org-buffer"))
@@ -1412,7 +1424,7 @@ CREATE-REF creates a reference and passes it to yank."
 
       (setq args (oidx--collect-values-for-add-update id))
 
-      (when (and create-ref
+      (when (and (eq (prefix-numeric-value ref-or-temp) 4)
                  (not ref))
         (setq ref (oidx--get-save-maxref))
         (oidx--plist-put args 'ref ref))
@@ -2007,14 +2019,18 @@ Optional argument NO-INC skips automatic increment on maxref."
 
 
 (defun oidx--advice-for-org-id-update-id-locations (orig-fun &rest args)
-  "Advice that moderates use of `org-id-update-id-location' for `oidx--id-find'.
+  "Advice that moderates use of `org-id-update-id-location' for `oidx--id-find' and `oidx--id-goto'.
 Argument ORIG-FUN is function to decorate.
 Optional argument ARGS are passed to orig-fun."
-  (message "ID %s cannot be found; therefore id-locations are beeing updated. Please stand by ..." oidx--id-not-found)
-  (sleep-for 1)
+  (oidx--message-before-update-id-locations)
   (apply orig-fun args)
   (message "Done."))
 
+
+(defun oidx--message-before-update-id-locations ()
+  "Issue a message that can be used before calling `org-id-update-id-location"
+  (message "ID %s cannot be found; therefore id-locations are beeing updated. Please stand by ..." oidx--id-not-found)
+  (sleep-for 2))
 
 
 ;; Index maintainance
@@ -2581,8 +2597,8 @@ Specify flag TEMPORARY for the or COMPARE it with the existing index."
 	    (ignore-errors (delete-file buffer-auto-save-file-name))
 	    (erase-buffer)
             (org-mode)))
-      
       (setq buffer (get-buffer (read-buffer "Please choose a buffer, where the new node for the index table will be appended. Buffer: "))))
+    
     (setq title (read-from-minibuffer "Please enter the title of the index node (leave empty for default 'index'): "))
     (if (string= title "") (setq title "index"))
     
@@ -2945,7 +2961,7 @@ Returns nil or plist with result"
   "Compute flag for current line."
   (let* ((yank (oidx--get-or-set-field 'yank))
         (id (oidx--get-or-set-field 'id))
-        (ff (cond ((and id yank) (cons "b" 'cursor)) (id (cons "n" nil)) (yank (cons "y" nil)) (t (cons " " nil)))))
+        (ff (cond ((and id yank) (cons "b" 'highlight)) (id (cons "n" nil)) (yank (cons "y" nil)) (t (cons " " nil)))))
     (propertize (car ff) 'face (or (cdr ff) 'org-agenda-dimmed-todo-face))))
 
 

@@ -6,7 +6,7 @@
 
   Read below for a description.
 
-  The current version is 7.4.7.
+  The current version is 7.5.0.
 
   Visit http://2484.de/org-index.html for a Screencast.
 
@@ -129,6 +129,12 @@
 ** Latest Change Log
 
    See ChangeLog.org for older entries.
+
+*** 7.5
+
+    - Accept double prefix argument to subcommand 'add', which
+      adds tag 'oidx_temp'
+    - Started to increase minor version even on small features
 
 *** 7.4
 

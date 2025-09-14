@@ -66,26 +66,26 @@ def accept fname,nname
   system "diff #{fname} #{nname}"
   if $? == 0
     puts "No differences between #{fname} and #{nname}."
-    rm nname
+    FileUtils.rm nname
   else
     puts "\n\n"
     system "ls -l #{fname} #{nname}"
     heading "Changes to #{fname}.\nPlease review 'diff old new' and output of 'ls'\nType RETURN to accept or Ctrl-c Ctrl-c to reject:"
     $stdin.gets
     make_backup fname
-    mv nname,fname
+    FileUtils.mv nname,fname
   end
 end
 
 
 def make_backup file
   dir = File.dirname(file) + '/backup'
-  mkdir dir,{:verbose => $v} unless File.directory?(dir)
+  FileUtils.mkdir(dir,verbose: $v) unless File.directory?(dir)
   backs = [ file ] + (1..12).map {|i| dir + '/' + File.basename(file) + "_" + i.to_s}
   pairs = backs[0..-2].zip(backs[1..-1]).reverse
   pairs.each do |p|
     next unless File.exist?(p[0])
-    cp p[0],p[1],:verbose => $v
+    FileUtils.cp(p[0],p[1],verbose: $v)
   end
 end
 
@@ -97,7 +97,7 @@ def maybe_copy from,to
   system("diff -q #{from} #{to} >/dev/null 2>&1")
   return false if $?.exitstatus == 0
   make_backup to
-  cp from,to,:verbose => $v
+  FileUtils.cp(from,to,verbose: $v)
   return true
 end
 
@@ -433,7 +433,6 @@ task :test => [:update_rake] do
   --eval "(menu-bar-mode -1)"
   --eval "(setq load-prefer-newer t)"
   --eval "(add-to-list 'load-path \\\".\\\")"
-  --eval "(setq package-user-dir \\\"#{File.dirname(__FILE__)+"/elpa"}\\\")"
   --eval "(setq base-dir \\\"#{File.dirname(__FILE__)}\\\")"
   --eval "(package-initialize)"
   --load ert

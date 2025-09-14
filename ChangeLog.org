@@ -1,3 +1,9 @@
+* 7.5 until 2025-09-08 Mo
+
+  - Accept double prefix argument to subcommand 'add', which
+    adds tag 'oidx_temp'
+  - Started to increase minor version even on small features
+
 * 7.4 until 2024-09-23 Mo
 
   - Index checks now find largest cells for each column
